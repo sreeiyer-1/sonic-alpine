@@ -3,11 +3,11 @@
 ### Build
 1. Clone the gpins repo:
 ```
-git clone https://sonic-preview.googlesource.com/alpine/sonic-buildimage
+git clone https://github.com/sonic-net/sonic-buildimage.git
 ```
 2. Init
 ```
-export NOJESSIE=1 NOSTRETCH=1 NOBUSTER=1
+export NOJESSIE=1 NOSTRETCH=1 NOBUSTER=1 NOBULLSEYE=1
 make init
 ```
 3. Configure
@@ -27,7 +27,7 @@ make target/sonic-alpinevs.img.gz
 Pre-req:
 A KVM enabled workstation (or VM) which can support VMs on it
 
-1. Setup KNE cluster
+1. Install KNE and setup KNE cluster
 ```
 kne deploy deploy/kne/kind-bridge.yaml
 ```
@@ -35,12 +35,22 @@ kne deploy deploy/kne/kind-bridge.yaml
 ```
 kind load docker-image alpine-vs:latest --name kne
 ```
-3. Create 2 switch Alpine topology:
+3. Download Lemming. Build the Lucius dataplane and load it
+```
+https://github.com/openconfig/lemming
+cd lemming
+bazel build //dataplane/standalone/lucius:image-tar
+docker load -i bazel-bin/dataplane/standalone/lucius/image-tar/tarball.tar
+kind load docker-image us-west1-docker.pkg.dev/openconfig-lemming/release/lucius:ga --name kne
+
+```
+4. Create 2 switch Alpine topology:
+
+- Modify the deploy/kne/twodut-alpine.pb.txt to point to the correct Alpine and Lucius images
 ```
 kne create twodut-alpine.pb.txt
 ```
-
-4. Terminals
+5. Terminals
 
 - [Terminal1] SSH to the AlpineVS DUT Switch VM inside the deployment:
 ```
@@ -57,36 +67,16 @@ ssh-copy-id -i /tmp/id_rsa.pub -oProxyCommand=none admin@$IPCTL
 ssh -i /tmp/id_rsa -oProxyCommand=none admin@$IPCTL
 ```
 
-### Test
-1. Copy `alpine_setup.sh` to `DUT` and run it
+5. Useful commands
+
+- Login to the host
+
 ```
-scp -i /tmp/id_rsa -oProxyCommand=none alpine_setup.sh admin@$IPDUT:~/
-ssh -i /tmp/id_rsa -oProxyCommand=none admin@$IPDUT
-sudo su
-./alpine_setup.sh
-```
-2. Copy `alpine_setup.sh` to `CTL` and run it
-```
-scp -i /tmp/id_rsa -oProxyCommand=none alpine_setup.sh admin@$IPCTL:~/
-ssh -i /tmp/id_rsa -oProxyCommand=none admin@$IPCTL
-sudo su
-./alpine_setup.sh
-```
-3. Copy `sai_entries` to `DUT` and run the following from p4rt container:
-```
-scp -i /tmp/id_rsa -oProxyCommand=none sai_entries admin@$IP:~/
-docker exec -it p4rt /bin/bash
-p4rt_program_table -cleanup=false -input_file=/tmp/sai_entries -push_config=true
-```
-4. From control switch (IPCTL) run scapy:
-```
-scapy
-> packet=Ether(dst="02:fe:37:a0:13:c2",src="00:00:00:00:03:04", type=0x86dd)/IPv6(src="ac:bc::",dst="aa:bb::")/TCP(sport=66,dport=680)/("Alpine test.");
-> sendp(packet,iface="Ethernet24",count=10)
-```
-5. Check counters on both side:
-```
-show interfaces counters -i Ethernet24
+kubectl exec -it -n twodut-alpine alpine-dut -- bash
 ```
 
+- Dataplane logs
+```
+kubectl logs -n twodut-alpine alpine-dut -c dataplane
+```
 
