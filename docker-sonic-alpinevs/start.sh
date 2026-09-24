@@ -73,6 +73,9 @@ fi
 
 /usr/bin/configdb-load.sh
 
+supervisorctl start lucius
+/usr/bin/wait_for_lucius.sh
+
 supervisorctl start syncd
 supervisorctl start portsyncd
 supervisorctl start orchagent

@@ -212,6 +212,26 @@ check_genetlink_module_warning() {
     fi
 }
 
+check_lucius_process() {
+    supervisorctl status lucius | grep -q RUNNING || {
+        echo "FAIL: lucius supervisor program is not RUNNING"
+        return 1
+    }
+    pass "lucius process is running"
+}
+
+check_lucius_endpoint() {
+    local target="${SOC_TARGET_SERVER:-127.0.0.1:50000}"
+    local host="${target%:*}"
+    local port="${target##*:}"
+
+    timeout 1 bash -c "</dev/tcp/${host}/${port}" 2>/dev/null || {
+        echo "FAIL: lucius endpoint ${target} is not reachable"
+        return 1
+    }
+    pass "lucius endpoint is up"
+}
+
 check_syslog() {
     local path="/var/log/syslog"
     local pattern="(segmentation fault|abrt|segv|traceback|panic|fatal|critical|cannot initialize system|supervisor:.*ERROR)"
@@ -275,6 +295,8 @@ check_supervisor_running p4rt
 check_supervisor_running telemetry
 check_supervisor_running_or_exited alpine
 check_supervisor_running pkt-handler
+check_lucius_process
+check_lucius_endpoint
 
 info "checking processes"
 check_process rsyslogd "/usr/sbin/rsyslogd"
